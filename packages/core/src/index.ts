@@ -9,13 +9,13 @@ import {
   FormPath,
   FormPathPattern,
   each,
-  deprecate,
   isObj
 } from '@uform/shared'
 import {
   FormValidator,
   setValidationLanguage,
-  setValidationLocale
+  setValidationLocale,
+  ValidateFieldOptions
 } from '@uform/validator'
 import { FormHeart } from './shared/lifecycle'
 import { FormGraph } from './shared/graph'
@@ -38,7 +38,10 @@ import {
   isField,
   FormHeartSubscriber,
   LifeCycleTypes,
-  isVirtualField
+  isVirtualField,
+  isFormState,
+  isFieldState,
+  isVirtualFieldState
 } from './types'
 export * from './shared/lifecycle'
 export * from './types'
@@ -284,7 +287,9 @@ export function createForm<FieldProps, VirtualFieldProps>(
   function registerVirtualField({
     name,
     path,
-    props
+    props,
+    computeState,
+    useDirty
   }: IVirtualFieldStateProps): IVirtualField {
     let nodePath = FormPath.parse(path || name)
     let dataPath = transformDataPath(nodePath)
@@ -294,7 +299,8 @@ export function createForm<FieldProps, VirtualFieldProps>(
       field = new VirtualFieldState({
         nodePath,
         dataPath,
-        useDirty: options.useDirty
+        computeState,
+        useDirty: isValid(useDirty) ? useDirty : options.useDirty
       })
       field.subscription = {
         notify: onVirtualFieldChange({ field, path: nodePath })
@@ -329,6 +335,8 @@ export function createForm<FieldProps, VirtualFieldProps>(
     required,
     rules,
     editable,
+    computeState,
+    useDirty,
     props
   }: Exclude<IFieldStateProps, 'dataPath' | 'nodePath'>): IField {
     let field: IField
@@ -339,7 +347,8 @@ export function createForm<FieldProps, VirtualFieldProps>(
       field = new FieldState({
         nodePath,
         dataPath,
-        useDirty: options.useDirty
+        computeState,
+        useDirty: isValid(useDirty) ? useDirty : options.useDirty
       })
       field.subscription = {
         notify: onFieldChange({ field, path: nodePath })
@@ -537,12 +546,12 @@ export function createForm<FieldProps, VirtualFieldProps>(
       focus() {
         field.setState((state: IFieldState<FieldProps>) => {
           state.active = true
-          state.visited = true
         })
       },
       blur() {
         field.setState((state: IFieldState<FieldProps>) => {
           state.active = false
+          state.visited = true
         })
       },
       push(value?: any) {
@@ -642,12 +651,13 @@ export function createForm<FieldProps, VirtualFieldProps>(
   }
 
   async function reset({
+    selector = '*',
     forceClear = false,
     validate = true
   }: IFormResetOptions = {}): Promise<void | IFormValidateResult> {
     let result: Promise<void | IFormValidateResult>
     leadingUpdate(() => {
-      graph.eachChildren(field => {
+      graph.eachChildren('', selector, field => {
         field.setState((state: IFieldState<FieldProps>) => {
           state.modified = false
           state.ruleErrors = []
@@ -743,7 +753,7 @@ export function createForm<FieldProps, VirtualFieldProps>(
 
   async function validate(
     path?: FormPathPattern,
-    opts?: {}
+    opts?: ValidateFieldOptions
   ): Promise<IFormValidateResult> {
     if (!state.getState(state => state.validating)) {
       state.unsafe_setSourceState(state => {
@@ -770,9 +780,12 @@ export function createForm<FieldProps, VirtualFieldProps>(
     })
   }
 
-  function setFormState(callback?: (state: IFormState) => any) {
+  function setFormState(
+    callback?: (state: IFormState) => any,
+    silent?: boolean
+  ) {
     leadingUpdate(() => {
-      state.setState(callback)
+      state.setState(callback, silent)
     })
   }
 
@@ -801,13 +814,14 @@ export function createForm<FieldProps, VirtualFieldProps>(
 
   function setFieldState(
     path: FormPathPattern,
-    callback?: (state: IFieldState<FieldProps>) => void
+    callback?: (state: IFieldState<FieldProps>) => void,
+    silent?: boolean
   ) {
     if (!isFn(callback)) return
     let matchCount = 0
     let pattern = FormPath.getPath(path)
     graph.select(pattern, field => {
-      field.setState(callback)
+      field.setState(callback, silent)
       matchCount++
     })
     if (matchCount === 0 || pattern.isWildMatchPattern) {
@@ -829,10 +843,14 @@ export function createForm<FieldProps, VirtualFieldProps>(
     }
   }
 
-  function setFieldValue(path: FormPathPattern, value?: any) {
-    setFieldState(path, state => {
-      state.value = value
-    })
+  function setFieldValue(path: FormPathPattern, value?: any, silent?: boolean) {
+    setFieldState(
+      path,
+      state => {
+        state.value = value
+      },
+      silent
+    )
   }
 
   function getFieldValue(path?: FormPathPattern) {
@@ -841,10 +859,18 @@ export function createForm<FieldProps, VirtualFieldProps>(
     })
   }
 
-  function setFieldInitialValue(path?: FormPathPattern, value?: any) {
-    setFieldState(path, state => {
-      state.initialValue = value
-    })
+  function setFieldInitialValue(
+    path?: FormPathPattern,
+    value?: any,
+    silent?: boolean
+  ) {
+    setFieldState(
+      path,
+      state => {
+        state.initialValue = value
+      },
+      silent
+    )
   }
 
   function getFieldInitialValue(path?: FormPathPattern) {
@@ -930,6 +956,25 @@ export function createForm<FieldProps, VirtualFieldProps>(
     )
   }
 
+  //在subscribe中必须同步使用，否则会监听不到变化
+  function hasChanged(target: any, path: FormPathPattern): boolean {
+    if (!env.publishing) {
+      throw new Error(
+        'The watch function must be used synchronously in the subscribe callback.'
+      )
+    }
+    if (isFormState(target)) {
+      return state.hasChanged(path)
+    } else if (isFieldState(target) || isVirtualFieldState(target)) {
+      const node = graph.get(target.path)
+      return node && node.hasChanged(path)
+    } else {
+      throw new Error(
+        'Illegal parameter,You must pass the correct state object(FormState/FieldState/VirtualFieldState).'
+      )
+    }
+  }
+
   const state = new FormState(options)
   const validator = new FormValidator(options)
   const graph = new FormGraph({
@@ -938,6 +983,7 @@ export function createForm<FieldProps, VirtualFieldProps>(
   const formApi = {
     submit,
     reset,
+    hasChanged,
     clearErrors,
     validate,
     setFormState,
@@ -951,24 +997,9 @@ export function createForm<FieldProps, VirtualFieldProps>(
     setFormGraph,
     setFieldValue,
     unsafe_do_not_use_transform_data_path: transformDataPath, //eslint-disable-line
-    setValue: deprecate(
-      setFieldValue,
-      'setValue',
-      'Please use the setFieldValue.'
-    ),
     getFieldValue,
-    getValue: deprecate(
-      getFieldValue,
-      'getValue',
-      'Please use the getFieldValue.'
-    ),
     setFieldInitialValue,
     getFieldInitialValue,
-    getInitialValue: deprecate(
-      getFieldInitialValue,
-      'getInitialValue',
-      'Please use the getFieldInitialValue.'
-    ),
     subscribe: (callback?: FormHeartSubscriber) => {
       return heart.subscribe(callback)
     },
@@ -979,12 +1010,22 @@ export function createForm<FieldProps, VirtualFieldProps>(
       heart.publish(type, payload)
     }
   }
-  const heart = new FormHeart({ ...options, context: formApi })
+  const heart = new FormHeart({
+    ...options,
+    context: formApi,
+    beforeNotify: () => {
+      env.publishing = true
+    },
+    afterNotify: () => {
+      env.publishing = false
+    }
+  })
   const env = {
     validateTimer: null,
     graphChangeTimer: null,
     shadowStage: false,
     leadingStage: false,
+    publishing: false,
     taskQueue: [],
     taskIndexes: {},
     removeNodes: {},

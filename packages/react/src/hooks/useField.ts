@@ -1,7 +1,6 @@
 import { useMemo, useEffect, useRef, useContext } from 'react'
 import { each, isFn } from '@uform/shared'
 import {
-  IFieldStateProps,
   IFieldState,
   IForm,
   IField,
@@ -10,10 +9,10 @@ import {
 import { raf, getValueFromEvent } from '../shared'
 import { useDirty } from './useDirty'
 import { useForceUpdate } from './useForceUpdate'
-import { IFieldHook, IFieldProps } from '../types'
+import { IFieldHook, IFieldStateUIProps } from '../types'
 import FormContext from '../context'
 
-const extendMutators = (mutators: IMutators, props: IFieldProps): IMutators => {
+const extendMutators = (mutators: IMutators, props: IFieldStateUIProps): IMutators => {
   return {
     ...mutators,
     change: (...args) => {
@@ -24,7 +23,7 @@ const extendMutators = (mutators: IMutators, props: IFieldProps): IMutators => {
     },
     blur: () => {
       mutators.blur()
-      if (props.triggerType === 'onBlur') {
+      if (props.triggerType === 'onBlur') {        
         mutators.validate()
       }
     }
@@ -32,7 +31,7 @@ const extendMutators = (mutators: IMutators, props: IFieldProps): IMutators => {
 }
 
 export const useField = (
-  options: IFieldStateProps & { triggerType?: 'onChange' | 'onBlur' }
+  options: IFieldStateUIProps
 ): IFieldHook => {
   const forceUpdate = useForceUpdate()
   const dirty = useDirty(options, ['props', 'rules', 'required', 'editable'])
@@ -52,12 +51,12 @@ export const useField = (
   const mutators = useMemo(() => {
     let initialized = false
     ref.current.field = form.registerField(options)
-    ref.current.subscriberId = ref.current.field.subscribe(() => {
+    ref.current.subscriberId = ref.current.field.subscribe(fieldState => {
       /**
        * 同步Field状态只需要forceUpdate一下触发重新渲染，因为字段状态全部代理在uform core内部
        */
       if (initialized) {
-        if (options.triggerType === 'onChange') {
+        if (options.triggerType === 'onChange' && !fieldState.pristine) {
           if (ref.current.field.hasChanged('value')) {
             mutators.validate()
           }

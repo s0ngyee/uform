@@ -4,21 +4,30 @@ import {
   isFn,
   each,
   globalThisPolyfill,
-  Subscribable
+  Subscribable,
+  FormPath,
+  FormPathPattern
 } from '@uform/shared'
 import produce, { Draft } from 'immer'
-import { IStateModelFactory, StateDirtyMap, IModel, StateModel } from '../types'
+import {
+  IStateModelProvider,
+  IStateModelFactory,
+  StateDirtyMap,
+  IModel,
+  StateModel
+} from '../types'
 const hasProxy = !!globalThisPolyfill.Proxy
 
 export const createStateModel = <State = {}, Props = {}>(
   Factory: IStateModelFactory<State, Props>
-) => {
-  return class Model<DefaultProps> extends Subscribable<State>
+): IStateModelProvider<State, Props> => {
+  return class Model<DefaultProps = any> extends Subscribable<State>
     implements IModel<State, Props & DefaultProps> {
     public state: State & { displayName?: string }
     public props: Props &
       DefaultProps & {
         useDirty?: boolean
+        computeState?: (draft: State, prevState: State) => void
       }
     public displayName?: string
     public dirtyNum: number
@@ -107,6 +116,9 @@ export const createStateModel = <State = {}, Props = {}>(
             this.dirtyNum = 0
           }
           callback(draft)
+          if (isFn(this.props.computeState)) {
+            this.props.computeState(draft, this.state)
+          }
           if (isFn(this.controller.computeState)) {
             this.controller.computeState(draft, this.state)
           }
@@ -148,6 +160,9 @@ export const createStateModel = <State = {}, Props = {}>(
             this.state,
             draft => {
               callback(draft)
+              if (isFn(this.props.computeState)) {
+                this.props.computeState(draft, this.state)
+              }
               if (isFn(this.controller.computeState)) {
                 this.controller.computeState(draft, this.state)
               }
@@ -180,8 +195,6 @@ export const createStateModel = <State = {}, Props = {}>(
             this.notify(this.getState())
             this.dirtys = {}
             this.dirtyNum = 0
-            //1. onFieldChange内的setFormValuesIn中不希望重置当前字段的dirtymap，如果不重置就会死循环
-            //2. 自己监听自己，自己修改自己的状态，希望触发onFieldChange
           }
         }
 
@@ -203,10 +216,13 @@ export const createStateModel = <State = {}, Props = {}>(
      *
      *在一组操作过程中的变化情况
      */
-    hasChanged = (key?: string) => {
-      return key
-        ? !isEqual(this.prevState[key], this.state[key])
+    hasChanged = (path?: FormPathPattern) => {
+      return path
+        ? !isEqual(
+            FormPath.getIn(this.prevState, path),
+            FormPath.getIn(this.state, path)
+          )
         : !isEqual(this.prevState, this.state)
     }
-  }
+  } as any
 }

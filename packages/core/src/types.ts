@@ -1,5 +1,9 @@
 import { FormPath, FormPathPattern, isFn, Subscribable } from '@uform/shared'
-import { ValidatePatternRules, ValidateNodeResult } from '@uform/validator'
+import {
+  ValidatePatternRules,
+  ValidateNodeResult,
+  ValidateFieldOptions
+} from '@uform/validator'
 import { FormLifeCycle } from './shared/lifecycle'
 import { Draft } from 'immer'
 
@@ -28,7 +32,7 @@ export enum LifeCycleTypes {
   ON_FORM_SUBMIT_START = 'onFormSubmitStart',
   ON_FORM_SUBMIT_END = 'onFormSubmitEnd',
   ON_FORM_VALUES_CHANGE = 'onFormValuesChange',
-  ON_FORM_INITIAL_VALUES_CHANGE = 'onFormInitialValueChange',
+  ON_FORM_INITIAL_VALUES_CHANGE = 'onFormInitialValuesChange',
   ON_FORM_VALIDATE_START = 'onFormValidateStart',
   ON_FORM_VALIDATE_END = 'onFormValidateEnd',
   ON_FORM_INPUT_CHANGE = 'onFormInputChange',
@@ -105,6 +109,10 @@ export interface IStateModelFactory<S, P> {
   displayName?: string
 }
 
+export interface IStateModelProvider<S, P> {
+  new (props: P): IModel<S, P>
+}
+
 export interface IFieldState<FieldProps = any> {
   displayName?: string
   name: string
@@ -153,17 +161,27 @@ export interface IFieldStateProps<FieldProps = any> {
   rules?: ValidatePatternRules[]
   required?: boolean
   editable?: boolean
-  onChange?: (fieldState: IField) => void
+  useDirty?: boolean
+  computeState?: (draft: IFieldState, prevState: IFieldState) => void
 }
 
 export const isField = (target: any): target is IField =>
-  target && target.displayName === 'FieldState'
+  target &&
+  target.displayName === 'FieldState' &&
+  isFn(target.getState) &&
+  isFn(target.setState)
 
 export const isFieldState = (target: any): target is IFieldState =>
-  target && target.displayName === 'FieldState'
+  target && target.displayName === 'FieldState' && target.name && target.path
+
+export const isFormState = (target: any): target is IFormState =>
+  target && target.displayName === 'FormState'
 
 export const isVirtualField = (target: any): target is IVirtualField =>
-  target && target.displayName === 'VirtualFieldState'
+  target &&
+  target.displayName === 'VirtualFieldState' &&
+  isFn(target.getState) &&
+  isFn(target.setState)
 
 export const isVirtualFieldState = (
   target: any
@@ -197,13 +215,12 @@ export interface IFormStateProps {
   initialValues?: {}
   values?: {}
   lifecycles?: FormLifeCycle[]
+  useDirty?: boolean
   editable?: boolean | ((name: string) => boolean)
+  validateFirst?: boolean
 }
 
 export interface IFormCreatorOptions extends IFormStateProps {
-  useDirty?: boolean
-  validateFirst?: boolean
-  editable?: boolean
   onChange?: (values: IFormState['values']) => void
   onSubmit?: (values: IFormState['values']) => any | Promise<any>
   onReset?: () => void
@@ -227,9 +244,13 @@ export interface IVirtualFieldStateProps<FieldProps = any> {
   path?: FormPathPattern
   dataPath?: FormPathPattern
   nodePath?: FormPathPattern
+  useDirty?: boolean
+  computeState?: (
+    draft: IVirtualFieldState,
+    prevState: IVirtualFieldState
+  ) => void
   name?: string
   props?: FieldProps
-  onChange?: (fieldState: IVirtualField) => void
 }
 
 export type IFormValidateResult = ValidateNodeResult
@@ -242,6 +263,7 @@ export interface IFormSubmitResult {
 export interface IFormResetOptions {
   forceClear?: boolean
   validate?: boolean
+  selector?: FormPathPattern
 }
 
 export interface IFormGraph {
@@ -258,9 +280,9 @@ export interface IMutators {
   remove(index: number | string): any
   unshift(value: any): any[]
   shift(): any[]
-  move($from: number, $to: number): any
-  moveDown(index: number): any
-  moveUp(index: number): any
+  move($from: number, $to: number): any[]
+  moveDown(index: number): any[]
+  moveUp(index: number): any[]
   validate(): Promise<IFormValidateResult>
   exist(index?: number | string): boolean
 }
@@ -280,7 +302,7 @@ export interface IModel<S = {}, P = {}> extends Subscribable {
   setState: (callback?: (state: S | Draft<S>) => void, silent?: boolean) => void
   unsafe_getSourceState: (callback?: (state: S) => any) => any
   unsafe_setSourceState: (callback?: (state: S) => void) => void
-  hasChanged: (key?: string) => boolean
+  hasChanged: (path?: FormPathPattern) => boolean
   isDirty: (key?: string) => boolean
   getDirtyInfo: () => StateDirtyMap<S>
 }
@@ -296,13 +318,18 @@ export interface IForm {
     onSubmit?: (values: IFormState['values']) => any | Promise<any>
   ): Promise<IFormSubmitResult>
   clearErrors: (pattern?: FormPathPattern) => void
+  hasChanged(target: any, path: FormPathPattern): boolean
   reset(options?: IFormResetOptions): Promise<void | IFormValidateResult>
-  validate(path?: FormPathPattern, options?: {}): Promise<IFormValidateResult>
-  setFormState(callback?: (state: IFormState) => any): void
+  validate(
+    path?: FormPathPattern,
+    options?: ValidateFieldOptions
+  ): Promise<IFormValidateResult>
+  setFormState(callback?: (state: IFormState) => any, silent?: boolean): void
   getFormState(callback?: (state: IFormState) => any): any
   setFieldState(
     path: FormPathPattern,
-    callback?: (state: IFieldState) => void
+    callback?: (state: IFieldState) => void,
+    silent?: boolean
   ): void
   getFieldState(
     path: FormPathPattern,

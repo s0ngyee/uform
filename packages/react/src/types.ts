@@ -68,7 +68,7 @@ export interface IVirtualFieldAPI {
   props: {}
 }
 
-export interface IFieldProps extends IFieldStateProps {
+export interface IFieldStateUIProps extends IFieldStateProps {
   triggerType?: 'onChange' | 'onBlur'
   getValueFromEvent?: (...args: any[]) => any
   children?: React.ReactElement | ((api: IFieldAPI) => React.ReactElement)
@@ -128,6 +128,7 @@ export interface IFormActions {
     onSubmit?: (values: IFormState['values']) => void | Promise<any>
   ): Promise<IFormSubmitResult>
   reset(options?: IFormResetOptions): void
+  hasChanged(target: any, path: FormPathPattern): boolean
   validate(path?: FormPathPattern, options?: {}): Promise<IFormValidateResult>
   setFormState(callback?: (state: IFormState) => any): void
   getFormState(callback?: (state: IFormState) => any): any
@@ -157,6 +158,7 @@ export interface IFormAsyncActions {
     onSubmit?: (values: IFormState['values']) => void | Promise<any>
   ): Promise<IFormSubmitResult>
   reset(options?: IFormResetOptions): Promise<void>
+  hasChanged(target: any, path: FormPathPattern): Promise<boolean>
   clearErrors: (pattern?: FormPathPattern) => Promise<void>
   validate(path?: FormPathPattern, options?: {}): Promise<IFormValidateResult>
   setFormState(callback?: (state: IFormState) => any): Promise<void>
