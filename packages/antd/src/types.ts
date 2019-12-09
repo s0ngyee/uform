@@ -9,13 +9,15 @@ import {
   IMarkupSchemaFieldProps,
   ISchemaFieldComponentProps
 } from '@uform/react-schema-renderer'
+import { PreviewTextConfigProps } from '@uform/react-shared-components'
 import { StyledComponent } from 'styled-components'
 
 type ColSpanType = number | string
 
-export type IAntdSchemaFormProps = ISchemaFormProps &
-  FormProps &
-  IFormItemTopProps
+export type IAntdSchemaFormProps = FormProps &
+  IFormItemTopProps &
+  PreviewTextConfigProps &
+  ISchemaFormProps
 
 export type IAntdSchemaFieldProps = IMarkupSchemaFieldProps
 
@@ -43,7 +45,7 @@ export type IFormItemTopProps = React.PropsWithChildren<
 >
 
 export interface ICompatItemProps
-  extends Exclude<ItemProps, 'labelCol' | 'wrapperCol'>,
+  extends Omit<ItemProps, 'labelCol' | 'wrapperCol'>,
     Partial<ISchemaFieldComponentProps> {
   labelCol?: number | { span: number; offset?: number }
   wrapperCol?: number | { span: number; offset?: number }

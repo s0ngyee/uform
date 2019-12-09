@@ -1,33 +1,76 @@
-import React from 'react'
+import React, { useContext, createContext } from 'react'
+import { isFn, isEqual } from '@uform/shared'
 import { IPreviewTextProps } from './types'
 
-export const PreviewText: React.FC<IPreviewTextProps> = props => {
+export interface PreviewTextConfigProps {
+  previewPlaceholder?: string | ((props: IPreviewTextProps) => string)
+}
+
+const PreviewTextContext = createContext<PreviewTextConfigProps>({})
+
+export const PreviewText: React.FC<IPreviewTextProps> & {
+  ConfigProvider: React.Context<PreviewTextConfigProps>['Provider']
+} = props => {
+  const context = useContext(PreviewTextContext) || {}
   let value: any
   if (props.dataSource && props.dataSource.length) {
-    let find = props.dataSource.filter(({ value }) =>
-      Array.isArray(props.value)
-        ? props.value.some(val => val == value)
-        : props.value == value
-    )
-    value = find.reduce((buf, item, index) => {
-      return buf.concat(item.label, index < find.length - 1 ? ', ' : '')
-    }, [])
+    if (Array.isArray(props.value)) {
+      value = props.value.map((val, index) => {
+        const finded = props.dataSource.find(item => isEqual(item.value, val))
+        if (finded) {
+          return (
+            <span key={index}>
+              {finded.label}
+              {index < props.value.length - 1 ? ' ,' : ''}
+            </span>
+          )
+        }
+      })
+    } else {
+      const fined = props.dataSource.find(item =>
+        isEqual(item.value, props.value)
+      )
+      if (fined) {
+        value = fined.label
+      }
+    }
   } else {
-    value = Array.isArray(props.value)
-      ? props.value.join(' ~ ')
-      : String(
-          props.value === undefined || props.value === null ? '' : props.value
+    if (Array.isArray(props.value)) {
+      value = props.value.map((val, index) => {
+        return (
+          <span key={index}>
+            {val}
+            {index < props.value.length - 1 ? '~' : ''}
+          </span>
         )
+      })
+    } else {
+      value = String(
+        props.value === undefined || props.value === null ? '' : props.value
+      )
+    }
   }
+  const placeholder = isFn(context.previewPlaceholder)
+    ? context.previewPlaceholder(props)
+    : context.previewPlaceholder
   return (
-    <p className={`preview-text ${props.className || ''}`}>
+    <p
+      style={{ padding: 0, margin: 0 }}
+      className={`preview-text ${props.className || ''}`}
+    >
       {props.addonBefore ? ' ' + props.addonBefore : ''}
       {props.innerBefore ? ' ' + props.innerBefore : ''}
       {props.addonTextBefore ? ' ' + props.addonTextBefore : ''}
-      {!value ? 'N/A' : value}
+      {value === '' ||
+      value === undefined ||
+      (Array.isArray(value) && value.length === 0)
+        ? placeholder || 'N/A'
+        : value}
       {props.addonTextAfter ? ' ' + props.addonTextAfter : ''}
       {props.innerAfter ? ' ' + props.innerAfter : ''}
       {props.addonAfter ? ' ' + props.addonAfter : ''}
     </p>
   )
 }
+
+PreviewText.ConfigProvider = PreviewTextContext.Provider

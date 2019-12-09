@@ -1,6 +1,6 @@
 import React, { useContext, Fragment } from 'react'
 import { Field, VirtualField, IFieldState } from '@uform/react'
-import { FormPath, isFn, isStr, isEqual } from '@uform/shared'
+import { FormPath, isFn, isStr, isEqual, isValid } from '@uform/shared'
 import {
   ISchemaFieldProps,
   ISchemaFieldComponentProps,
@@ -18,13 +18,13 @@ const computeSchemaState = (draft: IFieldState, prevState: IFieldState) => {
   const prevRules = prevSchema.getExtendsRules()
   const currentEditable = schema.getExtendsEditable()
   const prevEditable = prevSchema.getExtendsEditable()
-  if (!isEqual(currentRequired, prevRequired)) {
+  if (isValid(currentRequired) && !isEqual(currentRequired, prevRequired)) {
     draft.required = currentRequired
   }
-  if (!isEqual(currentRules, prevRules)) {
+  if (isValid(currentRules) && !isEqual(currentRules, prevRules)) {
     draft.rules = currentRules
   }
-  if (!isEqual(currentEditable, prevEditable)) {
+  if (isValid(currentEditable) && !isEqual(currentEditable, prevEditable)) {
     draft.selfEditable = currentEditable
   }
 }
@@ -62,6 +62,8 @@ export const SchemaField: React.FunctionComponent<ISchemaFieldProps> = (
         props={fieldSchema.getSelfProps()}
         triggerType={fieldSchema.getExtendsTriggerType()}
         editable={fieldSchema.getExtendsEditable()}
+        visible={fieldSchema.getExtendsVisible()}
+        display={fieldSchema.getExtendsDisplay()}
         required={fieldSchema.getExtendsRequired()}
         rules={fieldSchema.getExtendsRules()}
         computeState={computeSchemaState}

@@ -32,7 +32,7 @@ import ReactDOM from 'react-dom'
 import { filter, withLatestFrom, map, debounceTime } from 'rxjs/operators'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -41,19 +41,27 @@ import {
   FormPath,
   FormBlock,
   FormLayout,
-  createFormActions
+  createFormActions,
+  FormEffectHooks,
+  createEffectHook,
 } from '@uform/antd'
 import { Button } from 'antd'
 import Printer from '@uform/printer'
 import 'antd/dist/antd.css'
+
+const { onFormInit$, onFieldValueChange$ } = FormEffectHooks
+const onSearch$ = createEffectHook('onSearch')
+const onChangeOption$ = createEffectHook('onChangeOption')
+const actions = createFormActions()
 
 const App = () => {
   const [state, setState] = useState({ visible: false })
   return (
     <Printer>
       <SchemaForm
+        actions={actions}
         effects={($, { setFieldState, getFieldState }) => {
-          $('onFormInit').subscribe(() => {
+          onFormInit$().subscribe(() => {
             setFieldState(FormPath.match('*(gg,hh)'), state => {
               state.props['x-props'] = state.props['x-props'] || {}
               state.props['x-props'].style = {
@@ -64,14 +72,14 @@ const App = () => {
               }
             })
           })
-          $('onFieldValueChange', 'aa').subscribe(fieldState => {
+          onFieldValueChange$('aa').subscribe(fieldState => {
             console.log(fieldState.value)
             setFieldState('bb', state => {
               state.visible = !fieldState.value
             })
           })
           
-          $('onFieldValueChange', 'cc').subscribe(fieldState => {
+          onFieldValueChange$('cc').subscribe(fieldState => {
             setFieldState('dd', state => {
               state.visible = !fieldState.value
             })
@@ -89,14 +97,14 @@ const App = () => {
               }
             })
           })
-          $('onFieldValueChange', 'mm').subscribe(fieldState => {
+          onFieldValueChange$('mm').subscribe(fieldState => {
             setFieldState('ff', state => {
               state.visible = !fieldState.value
             })
           })
-          $('onFieldValueChange', 'gg')
+          onFieldValueChange$('gg')
             .pipe(
-              withLatestFrom($('onChangeOption')),
+              withLatestFrom(onChangeOption$()),
               map(([fieldState, { payload: option }]) => {
                 return {
                   state: fieldState,
@@ -114,7 +122,8 @@ const App = () => {
                 }
               })
             })
-          $('onSearch', 'gg')
+
+          onSearch$('gg')
             .pipe(
               map(fieldState => {
                 setFieldState('gg', state => {
@@ -175,7 +184,7 @@ const App = () => {
             name="gg"
             type="string"
             x-effect={dispatch => ({
-              onChange(value, option) {
+              onChange(value, option) {       
                 dispatch('onChangeOption', option)
               },
               onSearch(value) {
@@ -202,6 +211,99 @@ const App = () => {
 ReactDOM.render(<App />, document.getElementById('root'))
 ```
 
+
+### 循环联动
+
+> 联动关系
+> 总价 = 单价 \* 数量
+> 数量 = 总价 / 单价
+> 单价 = 总价 / 数量
+
+```jsx
+import React from 'react'
+import ReactDOM from 'react-dom'
+import {
+  SchemaForm,
+  SchemaMarkupField as Field,
+  FormButtonGroup,
+  Submit,
+  Reset,
+  FormItemGrid,
+  FormCard,
+  FormPath,
+  FormBlock,
+  FormLayout,
+  FormEffectHooks,
+} from '@uform/next'
+import { filter, withLatestFrom, map, debounceTime } from 'rxjs/operators'
+import { Button } from '@alifd/next'
+import Printer from '@uform/printer'
+import '@alifd/next/dist/next.css'
+
+const { onFieldValueChange$ } = FormEffectHooks
+
+const App = () => (
+  <Printer>
+    <SchemaForm
+      effects={($, { setFieldState, getFieldState }) => {
+        onFieldValueChange$('total').subscribe(({ value }) => {
+          if (!value) return
+          setFieldState('count', state => {
+            const price = getFieldState('price', state => state.value)
+            if (!price) return
+            state.value = value / price
+          })
+          setFieldState('price', state => {
+            const count = getFieldState('count', state => state.value)
+            if (!count) return
+            state.value = value / count
+          })
+        })
+        onFieldValueChange$('price').subscribe(({ value }) => {
+          if (!value) return
+          setFieldState('total', state => {
+            const count = getFieldState('count', state => state.value)
+            if (!count) return
+            state.value = value * count
+          })
+          setFieldState('count', state => {
+            const total = getFieldState('total', state => state.value)
+            if (!total) return
+            state.value = total / value
+          })
+        })
+        onFieldValueChange$('count').subscribe(({ value }) => {
+          if (!value) return
+          setFieldState('total', state => {
+            const price = getFieldState('price', state => state.value)
+            if (!price) return
+            state.value = value * price
+          })
+          setFieldState('price', state => {
+            const total = getFieldState('total', state => state.value)
+            if (!total) return
+            state.value = total / value
+          })
+        })
+      }}
+      onChange={v => console.log(v)}
+      labelCol={6}
+      wrapperCol={4}
+      onSubmit={v => console.log(v)}
+    >
+      <Field name="total" type="number" required title="总价" />
+      <Field name="count" type="number" required title="数量" />
+      <Field name="price" type="number" required title="单价" />
+      <FormButtonGroup offset={6}>
+        <Submit />
+        <Reset validate={false} />
+      </FormButtonGroup>
+    </SchemaForm>
+  </Printer>
+)
+ReactDOM.render(<App />, document.getElementById('root'))
+```
+
 ### 异步数据联动
 
 > 当前例子主要演示了从某个字段的变化，引起某些异步操作，然后再去更新某些字段的状
@@ -215,7 +317,7 @@ import ReactDOM from 'react-dom'
 import { filter, withLatestFrom, map, debounceTime } from 'rxjs/operators'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -224,11 +326,14 @@ import {
   FormPath,
   FormBlock,
   FormLayout,
-  createFormActions
+  createFormActions,
+  FormEffectHooks,
 } from '@uform/antd'
 import { Button } from 'antd'
 import Printer from '@uform/printer'
 import 'antd/dist/antd.css'
+
+const { onFormInit$, onFieldValueChange$ } = FormEffectHooks
 
 const App = () => (
   <Printer>
@@ -264,10 +369,10 @@ const App = () => (
             state.value = value
           })
         }
-        $('onFormInit').subscribe(() => {
+        onFormInit$().subscribe(() => {
           hide('bb')
         })
-        $('onFieldValueChange', 'aa').subscribe(fieldState => {
+        onFieldValueChange$('aa').subscribe(fieldState => {
           if (!fieldState.value) return
           show('bb')
           loading('bb')
@@ -277,7 +382,7 @@ const App = () => (
             setValue('bb', '1111')
           }, 1000)
         })
-        $('onFieldValueChange', 'bb').subscribe(fieldState => {
+        onFieldValueChange$('bb').subscribe(fieldState => {
           console.log(fieldState.loading)
           if (!fieldState.value) return hide('cc')
           show('cc')
@@ -321,7 +426,7 @@ import ReactDOM from 'react-dom'
 import { filter, withLatestFrom, map, debounceTime } from 'rxjs/operators'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -381,7 +486,7 @@ import ReactDOM from 'react-dom'
 import { filter, withLatestFrom, map, debounceTime } from 'rxjs/operators'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,

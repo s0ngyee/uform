@@ -16,7 +16,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -58,7 +58,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -99,7 +99,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -147,7 +147,7 @@ import React, { useState } from 'react'
 import ReactDOM from 'react-dom'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -164,7 +164,7 @@ import Printer from '@uform/printer'
 import 'antd/dist/antd.css'
 
 const App = () => {
-  const [state, setState] = useState({ editable: true })  
+  const [state, setState] = useState({ editable: true })
   return (
     <Printer>
       <SchemaForm
@@ -203,16 +203,16 @@ const App = () => {
             ​<Field name="ddd2" type="string" title="字段5" />​
             <Field name="eee2" type="string" title="字段6" />​
           </FormBlock>
-        </FormCard>
-        ​<FormButtonGroup offset={8} sticky>
+        </FormCard>​
+        <FormButtonGroup offset={8} sticky>
           ​ <Submit>提交</Submit>​
-           <Button
-             type="primary"
-             onClick={() => setState({ editable: !state.editable })}
-           >
+          <Button
+            type="primary"
+            onClick={() => setState({ editable: !state.editable })}
+          >
             {state.editable ? '详情' : '编辑'}
-           </Button>
-           <Reset>重置</Reset>​
+          </Button>
+          <Reset>重置</Reset>​
         </FormButtonGroup>
       </SchemaForm>
     </Printer>
@@ -232,7 +232,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   Reset,
@@ -241,6 +241,7 @@ import {
   FormPath,
   FormBlock,
   FormLayout,
+  FormTextBox,
   createFormActions
 } from '@uform/antd'
 import { Button } from 'antd'
@@ -269,14 +270,12 @@ const App = () => (
 ReactDOM.render(<App />, document.getElementById('root'))
 ```
 
-
 ## 分步表单
-
 
 ```jsx
 import {
   SchemaForm,
-  Field,
+  SchemaMarkupField as Field,
   FormButtonGroup,
   Submit,
   FormEffectHooks,
@@ -298,6 +297,8 @@ const { onFormInit$ } = FormEffectHooks
 
 const actions = createFormActions()
 
+let cache = {}
+
 export default () => (
   <SchemaForm
     onSubmit={values => {
@@ -314,15 +315,14 @@ export default () => (
           state.visible = false
         })
       })
-      FormStep.useEffects(['step-1', 'step-2', 'step-3'])
     }}
   >
     <FormStep
       style={{ marginBottom: 20 }}
       dataSource={[
-        { title: '基本信息' },
-        { title: '财务信息' },
-        { title: '条款信息' }
+        { title: '基本信息', name: 'step-1' },
+        { title: '财务信息', name: 'step-2' },
+        { title: '条款信息', name: 'step-3' }
       ]}
     />
     <FormCard name="step-1" title="基本信息">
@@ -341,6 +341,20 @@ export default () => (
       </Button>
       <Button onClick={() => actions.dispatch(FormStep.ON_FORM_STEP_NEXT)}>
         下一步
+      </Button>
+      <Button
+        onClick={() => {
+          cache = actions.getFormGraph()
+        }}
+      >
+        存储当前状态
+      </Button>
+      <Button
+        onClick={() => {
+          actions.setFormGraph(cache)
+        }}
+      >
+        回滚状态
       </Button>
     </FormButtonGroup>
   </SchemaForm>

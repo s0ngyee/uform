@@ -1,8 +1,7 @@
 import React from 'react'
 import {
   ValidatePatternRules,
-  ValidateDescription,
-  CustomValidator,
+  ValidateArrayRules,
   getMessage
 } from '@uform/validator'
 import {
@@ -34,7 +33,12 @@ export class Schema implements ISchema {
   public readOnly?: boolean
   public writeOnly?: boolean
   public type?: 'string' | 'object' | 'array' | 'number' | string
-  public enum?: Array<string | number | { label: SchemaMessage; value: any }>
+  public enum?: Array<
+  | string
+  | number
+  | { label: SchemaMessage; value: any; [key: string]: any }
+  | { key: any; title: SchemaMessage; [key: string]: any }
+>
   public const?: any
   public multipleOf?: number
   public maximum?: number
@@ -61,6 +65,8 @@ export class Schema implements ISchema {
   public additionalProperties?: Schema
   /** extend json schema specs */
   public editable?: boolean
+  public visible?: boolean
+  public display?: boolean
   public ['x-props']?: { [name: string]: any }
   public ['x-index']?: number
   public ['x-rules']?: ValidatePatternRules
@@ -81,9 +87,14 @@ export class Schema implements ISchema {
 
   public _isJSONSchemaObject = true
 
-  constructor(json: ISchema, parent?: Schema) {
+  public name?: string
+
+  constructor(json: ISchema, parent?: Schema, name?: string) {
     if (parent) {
       this.parent = parent
+    }
+    if (name) {
+      this.name = name
     }
     return this.fromJSON(json) as any
   }
@@ -109,8 +120,12 @@ export class Schema implements ISchema {
     return res
   }
 
-  merge(props: {}) {
-    Object.assign(this, props)
+  merge(spec: any) {
+    if (spec instanceof Schema) {
+      Object.assign(this, spec.getSelfProps())
+    } else {
+      Object.assign(this, spec)
+    }
     return this
   }
 
@@ -143,15 +158,21 @@ export class Schema implements ISchema {
     return props
   }
   getExtendsRules() {
-    let rules: Array<string | ValidateDescription | CustomValidator> = []
+    let rules: ValidateArrayRules = []
     if (this.format) {
       rules.push({ format: this.format })
     }
     if (isValid(this.maxItems)) {
       rules.push({ max: this.maxItems })
     }
+    if (isValid(this.minItems)) {
+      rules.push({ max: this.minItems })
+    }
     if (isValid(this.maxLength)) {
       rules.push({ max: this.maxLength })
+    }
+    if (isValid(this.minLength)) {
+      rules.push({ min: this.minLength })
     }
     if (isValid(this.maximum)) {
       rules.push({ maximum: this.maximum })
@@ -233,10 +254,39 @@ export class Schema implements ISchema {
   getExtendsEditable(): boolean {
     if (isValid(this.editable)) {
       return this.editable
-    } else if (isValid(this['x-props'] && this['x-props'].editable)) {
+    } else if (isValid(this['x-props']) && isValid(this['x-props'].editable)) {
       return this['x-props'].editable
+    } else if (
+      isValid(this['x-component-props']) &&
+      isValid(this['x-component-props'].editable)
+    ) {
+      return this['x-component-props'].editable
     } else if (isValid(this.readOnly)) {
       return !this.readOnly
+    }
+  }
+  getExtendsVisible(): boolean {
+    if (isValid(this.visible)) {
+      return this.visible
+    } else if (isValid(this['x-props']) && isValid(this['x-props'].visible)) {
+      return this['x-props'].visible
+    } else if (
+      isValid(this['x-component-props']) &&
+      isValid(this['x-component-props'].visible)
+    ) {
+      return this['x-component-props'].visible
+    }
+  }
+  getExtendsDisplay(): boolean {
+    if (isValid(this.display)) {
+      return this.display
+    } else if (isValid(this['x-props']) && isValid(this['x-props'].display)) {
+      return this['x-props'].display
+    } else if (
+      isValid(this['x-component-props']) &&
+      isValid(this['x-component-props'].display)
+    ) {
+      return this['x-component-props'].display
     }
   }
   getExtendsTriggerType() {
@@ -274,7 +324,7 @@ export class Schema implements ISchema {
    */
   setProperty(key: string, schema: ISchema) {
     this.properties = this.properties || {}
-    this.properties[key] = new Schema(schema, this)
+    this.properties[key] = new Schema(schema, this, key)
     return this.properties[key]
   }
   setProperties(properties: SchemaProperties<ISchema>) {
@@ -324,15 +374,15 @@ export class Schema implements ISchema {
       this['x-component'] = lowercase(json['x-component'])
     }
     if (!isEmpty(json.properties)) {
-      this.properties = map(json.properties, item => {
-        return new Schema(item, this)
+      this.properties = map(json.properties, (item, key) => {
+        return new Schema(item, this, key)
       })
       if (isValid(json.additionalProperties)) {
         this.additionalProperties = new Schema(json.additionalProperties, this)
       }
       if (isValid(json.patternProperties)) {
-        this.patternProperties = map(json.patternProperties, item => {
-          return new Schema(item, this)
+        this.patternProperties = map(json.patternProperties, (item, key) => {
+          return new Schema(item, this, key)
         })
       }
     } else if (!isEmpty(json.items)) {
@@ -365,12 +415,14 @@ export class Schema implements ISchema {
     return Schema.getOrderProperties(this)
   }
 
-  getOrderPatternProperties() {
+  unrelease_getOrderPatternProperties() {
     return Schema.getOrderProperties(this, 'patternProperties')
   }
 
-  mapPatternProperties(callback?: (schema: Schema, key: string) => any) {
-    return this.getOrderPatternProperties().map(({ schema, key }) => {
+  unrelease_mapPatternProperties(
+    callback?: (schema: Schema, key: string) => any
+  ) {
+    return this.unrelease_getOrderPatternProperties().map(({ schema, key }) => {
       return callback(schema, key)
     })
   }

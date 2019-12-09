@@ -408,7 +408,9 @@ describe('validate', () => {
       path: 'c',
       rules: [() => ({ type: 'error', message: 'error msg' })]
     }) // CustomValidator error
-    await form.validate()
+    try {
+      await form.submit()
+    } catch (e) {}
     expect(onValidateFailedTrigger).toBeCalledTimes(1)
   })
 
@@ -1175,6 +1177,17 @@ describe('createMutators', () => {
     expect(form.getFieldValue('mm')).toEqual(arr.slice(0, 1))
   })
 
+  test('remove object key', async () => {
+    const form = createForm({ useDirty: true })
+    const initialValue = { username: '1234' }
+    const user = form.registerField({ path: 'user', initialValue })
+    form.registerField({ path: 'user.username' })
+    const mutators = form.createMutators(user)
+    expect(form.getFieldValue('user')).toEqual(initialValue)
+    mutators.remove('username')
+    expect(form.getFieldValue('user')).toEqual({})
+  })
+
   test('exist', async () => {
     const form = createForm()
     const mm = form.registerField({ path: 'mm', value: arr })
@@ -1430,7 +1443,7 @@ describe('validator', () => {
       values: {},
       initialValues: {},
       onChange: values => {
-       // console.log(values)
+        // console.log(values)
       }
     })
 
@@ -1470,7 +1483,7 @@ describe('validator', () => {
       values: {},
       initialValues: {},
       onChange: values => {
-      //  console.log(values)
+        //  console.log(values)
       }
     })
 
@@ -1509,7 +1522,7 @@ describe('validator', () => {
       values: {},
       initialValues: {},
       onChange: values => {
-       // console.log(values)
+        // console.log(values)
       }
     })
 
